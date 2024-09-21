@@ -250,7 +250,7 @@ Mermaid diagram:
         console.log('Extracted Mermaid diagram:', mermaidDiagram);
 
         // Generate image from Mermaid diagram
-        /*const imageName = await generateMermaidImage(mermaidDiagram);
+        const imageName = await generateMermaidImage(mermaidDiagram);
 
         if (!imageName) {
             console.warn('Failed to generate image from Mermaid diagram');
@@ -258,11 +258,11 @@ Mermaid diagram:
         }
 
         // Construct the image URL
-        const imageUrl = `https://ops.favoratti.com/diagrams/${imageName}`;*/
+        const imageUrl = `https://ops.favoratti.com/diagrams/${imageName}`;
 
         const result = {
             mermaidDiagram,
-            //imageUrl,
+            imageUrl,
         };
 
         // Store the result in the cache
