@@ -139,8 +139,72 @@ app.post('/query', async (req, res) => {
 
         // Create a prompt for the OpenAI API
         const prompt = `
+#MISSION
 Given the following JSON data, create a Mermaid diagram that best represents the relationships or flow depicted by the data. Use appropriate Mermaid syntax.
 
+#EXAMPLES
+##Example Gantt Diagram:
+gantt
+    title A Gantt Diagram
+    dateFormat YYYY-MM-DD
+    section Section
+        A task          :a1, 2014-01-01, 30d
+        Another task    :after a1, 20d
+    section Another
+        Task in Another :2014-01-12, 12d
+        another task    :24d
+
+##Example Pie Chart:
+pie title Cost by Deputy
+    "Deputy A" : 386
+    "Deputy B" : 85
+    "Deputy C" : 15
+    
+##Example Cost Journey:
+journey
+    title Cost Per Month
+    section January
+      Flights: 5: Me
+      Office Supply: 3: Me
+      Taxi: 1: Me, Joe
+    section February
+      Flights: 6: Me
+      Office Supply: 5: Me
+
+##Example Quadrant Chart
+quadrantChart
+    title Cost compared to others
+    x-axis Low Reach --> This Month Cost
+    y-axis Low Engagement --> Year Cost
+    quadrant-1 Label A
+    quadrant-2 Label B
+    quadrant-3 Label C
+    quadrant-4 Label D
+    Deputy A: [0.3, 0.6]
+    Deputy B: [0.45, 0.23]
+    Deputy C: [0.57, 0.69]
+    Deputy D: [0.78, 0.34]
+    Deputy E: [0.40, 0.34]
+    Deputy F: [0.35, 0.78]
+
+##Example Timeline
+timeline
+    title History of expenditure
+    Jan/2021 : R$ 1000
+    Fev/2021 : R$ 2000
+    Mar/2021 : R$ 4500
+    Abr/2021 : R$ 2000
+    
+##Example XY Chart
+    xychart-beta
+    title "Cost vs Total Cost"
+    x-axis [jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec]
+    y-axis "Revenue (in $)" 4000 --> 11000
+    bar [5000, 6000, 7500, 8200, 9500, 10500, 11000, 10200, 9200, 8500, 7000, 6000]
+    line [5000, 6000, 7500, 8200, 9500, 10500, 11000, 10200, 9200, 8500, 7000, 6000]
+
+  
+##IMPORTANT
 **Important:** Provide only the Mermaid code enclosed within \`\`\`mermaid and \`\`\`. Do not include any explanations or additional text.
 
 Data:
