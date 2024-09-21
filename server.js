@@ -16,6 +16,19 @@ const port = process.env.SERVER_PORT || 1413;
 // Middleware to parse JSON bodies
 app.use(express.json());
 
+// **NEW CODE STARTS HERE**
+
+// Ensure the 'diagrams' directory exists
+const diagramsDir = path.join(process.cwd(), 'diagrams');
+if (!fs.existsSync(diagramsDir)) {
+    fs.mkdirSync(diagramsDir);
+}
+
+// Serve static files from the 'diagrams' directory
+app.use('/diagrams', express.static(diagramsDir));
+
+// **NEW CODE ENDS HERE**
+
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -33,6 +46,15 @@ const authenticateToken = (req, res, next) => {
 
     next(); // Token is valid
 };
+
+// Middleware to log incoming requests
+app.use((req, res, next) => {
+    console.log(`Incoming request: ${req.method} ${req.url}`);
+    next();
+});
+
+// Apply the authentication middleware to all routes below
+app.use(authenticateToken);
 
 // Create a connection pool using environment variables
 const pool = mysql.createPool({
@@ -59,28 +81,6 @@ const cache = new LRUCache({
 
 // Log when the server starts
 console.log('Server is starting...');
-
-// Middleware to log incoming requests
-app.use((req, res, next) => {
-    console.log(`Incoming request: ${req.method} ${req.url}`);
-    next();
-});
-
-// Apply the authentication middleware to all routes below
-app.use(authenticateToken);
-
-// **NEW CODE STARTS HERE**
-
-// Ensure the 'diagrams' directory exists
-const diagramsDir = path.join(process.cwd(), 'diagrams');
-if (!fs.existsSync(diagramsDir)) {
-    fs.mkdirSync(diagramsDir);
-}
-
-// Serve static files from the 'diagrams' directory
-app.use('/diagrams', express.static(diagramsDir));
-
-// **NEW CODE ENDS HERE**
 
 // Route to handle SQL queries, generate Mermaid diagrams, and create images
 app.post('/query', async (req, res) => {
@@ -179,8 +179,6 @@ Mermaid diagram:
 
         console.log('Extracted Mermaid diagram:', mermaidDiagram);
 
-        // **UPDATED CODE STARTS HERE**
-
         // Generate image from Mermaid diagram
         const imageName = await generateMermaidImage(mermaidDiagram);
 
@@ -214,8 +212,6 @@ Mermaid diagram:
 
         // Return the result to the client
         res.json(result);
-
-        // **UPDATED CODE ENDS HERE**
 
     } catch (err) {
         console.error('Error processing request:', err.message);
