@@ -149,21 +149,44 @@ Mermaid diagram:
         const mermaidDiagram = extractMermaidCode(assistantMessage);
 
         if (!mermaidDiagram) {
-            throw new Error('Failed to extract Mermaid diagram from OpenAI response');
+            console.warn('Failed to extract Mermaid diagram from OpenAI response');
+            // Proceed without Mermaid diagram
+            const result = {
+                sql,
+                message: 'Mermaid diagram could not be generated.',
+                data: results,
+            };
+            // Store the result in the cache
+            cache.set(sql, result);
+            // Return the result to the client
+            return res.json(result);
         }
 
         console.log('Extracted Mermaid diagram:', mermaidDiagram);
 
         // Generate image from Mermaid diagram
         const imageBase64 = await generateMermaidImage(mermaidDiagram);
+
         if (!imageBase64) {
-            throw new Error('Failed to generate image from Mermaid diagram');
+            console.warn('Failed to generate image from Mermaid diagram');
+            // Proceed without image
+            const result = {
+                sql,
+                mermaidDiagram,
+                message: 'Image could not be generated from Mermaid diagram.',
+                data: results,
+            };
+            // Store the result in the cache
+            cache.set(sql, result);
+            // Return the result to the client
+            return res.json(result);
         }
 
         const result = {
             sql,
             mermaidDiagram,
             imageBase64, // Base64 encoded image
+            data: results,
         };
 
         // Store the result in the cache
