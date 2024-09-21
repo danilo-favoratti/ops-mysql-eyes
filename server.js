@@ -150,7 +150,7 @@ app.post('/sql-query', async (req, res) => {
 
 // Endpoint to generate Mermaid diagrams and images
 app.post('/generate-mermaid', async (req, res) => {
-    const data = JSON.stringify(req.body.data.mermaidDiagram).slice(1, -1);
+    const data = JSON.stringify(req.body.mermaidDiagram).slice(1, -1);
 
     if (!data) {
         console.error('No data provided for Mermaid diagram generation');
