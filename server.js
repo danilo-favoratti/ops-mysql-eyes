@@ -262,11 +262,7 @@ Mermaid diagram:
 
         const result = {
             mermaidDiagram,
-<<<<<<< HEAD
             //imageUrl,
-=======
-            imageUrl,
->>>>>>> 9491358 (separating sql and mermaid)
         };
 
         // Store the result in the cache
