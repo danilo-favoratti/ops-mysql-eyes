@@ -80,7 +80,7 @@ console.log('Server is starting...');
 
 // Endpoint to handle SQL queries
 app.post('/sql-query', async (req, res) => {
-    const sql = JSON.stringify(req.body.sql);
+    const sql = JSON.stringify(req.body.sql).slice(1, -1);
 
     console.log(`Received SQL query: ${sql}`);
 
