@@ -6,9 +6,9 @@ import express from 'express';
 import mysql from 'mysql2/promise'; // Promise-based MySQL client
 import OpenAI from 'openai'; // Import OpenAI default export
 import { LRUCache } from 'lru-cache';
-import mermaid from 'mermaid'; // For rendering Mermaid diagrams
-import { JSDOM } from 'jsdom'; // For virtual DOM
-import sharp from 'sharp'; // For image conversion
+import { exec } from 'child_process'; // For executing shell commands
+import fs from 'fs';
+import path from 'path';
 
 const app = express();
 const port = process.env.SERVER_PORT || 1413;
@@ -215,44 +215,41 @@ const extractMermaidCode = (text) => {
     }
 };
 
-// Function to generate an image from Mermaid code using mermaid and sharp
+// Function to generate an image from Mermaid code using mermaid-cli
 const generateMermaidImage = async (mermaidCode) => {
     try {
-        // Set up virtual DOM inside the function
-        const { window } = new JSDOM('<!DOCTYPE html><html><body></body></html>');
-        const document = window.document;
+        // Create temporary input and output file paths
+        const timestamp = Date.now();
+        const inputFilePath = path.join(process.cwd(), `diagrams/diagram-${timestamp}.mmd`);
+        const outputFilePath = path.join(process.cwd(), `diagrams/diagram-${timestamp}.png`);
 
-        // Configure Mermaid
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: 'default', // You can change the theme if needed
-            mermaid: {
-                securityLevel: 'loose',
-            },
+        // Write the Mermaid code to the input file
+        fs.writeFileSync(inputFilePath, mermaidCode);
+
+        // Construct the command to execute mermaid-cli
+        const command = `npx -p @mermaid-js/mermaid-cli mmdc -i "${inputFilePath}" -o "${outputFilePath}" --quiet`;
+
+        // Execute the command
+        await new Promise((resolve, reject) => {
+            exec(command, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`Error executing mermaid-cli: ${stderr}`);
+                    reject(new Error(stderr || 'Error executing mermaid-cli'));
+                } else {
+                    resolve();
+                }
+            });
         });
 
-        // Render the Mermaid diagram to SVG
-        const svgCode = await new Promise((resolve, reject) => {
-            mermaid.mermaidAPI.render(
-                'mermaidGraph',
-                mermaidCode,
-                (svg) => {
-                    resolve(svg);
-                },
-                (error) => {
-                    reject(error);
-                },
-                document.body
-            );
-        });
+        // Read the generated image file
+        const imageBuffer = fs.readFileSync(outputFilePath);
 
-        // Convert SVG to PNG using Sharp
-        const pngBuffer = await sharp(Buffer.from(svgCode))
-            .png()
-            .toBuffer();
+        // Convert the image buffer to a base64 string
+        const imageBase64 = imageBuffer.toString('base64');
 
-        // Convert the PNG buffer to a base64 string
-        const imageBase64 = pngBuffer.toString('base64');
+        // Clean up temporary files
+        fs.unlinkSync(inputFilePath);
+        fs.unlinkSync(outputFilePath);
 
         return imageBase64;
     } catch (error) {
