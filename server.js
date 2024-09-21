@@ -69,6 +69,19 @@ app.use((req, res, next) => {
 // Apply the authentication middleware to all routes below
 app.use(authenticateToken);
 
+// **NEW CODE STARTS HERE**
+
+// Ensure the 'diagrams' directory exists
+const diagramsDir = path.join(process.cwd(), 'diagrams');
+if (!fs.existsSync(diagramsDir)) {
+    fs.mkdirSync(diagramsDir);
+}
+
+// Serve static files from the 'diagrams' directory
+app.use('/diagrams', express.static(diagramsDir));
+
+// **NEW CODE ENDS HERE**
+
 // Route to handle SQL queries, generate Mermaid diagrams, and create images
 app.post('/query', async (req, res) => {
     const sql = req.body.sql;
@@ -166,10 +179,12 @@ Mermaid diagram:
 
         console.log('Extracted Mermaid diagram:', mermaidDiagram);
 
-        // Generate image from Mermaid diagram
-        const imageBase64 = await generateMermaidImage(mermaidDiagram);
+        // **UPDATED CODE STARTS HERE**
 
-        if (!imageBase64) {
+        // Generate image from Mermaid diagram
+        const imageName = await generateMermaidImage(mermaidDiagram);
+
+        if (!imageName) {
             console.warn('Failed to generate image from Mermaid diagram');
             // Proceed without image
             const result = {
@@ -184,10 +199,13 @@ Mermaid diagram:
             return res.json(result);
         }
 
+        // Construct the image URL
+        const imageUrl = `https://ops.favoratti.com/diagrams/${imageName}`;
+
         const result = {
             sql,
             mermaidDiagram,
-            imageBase64, // Base64 encoded image
+            imageUrl, // URL to the image
             data: results,
         };
 
@@ -196,6 +214,9 @@ Mermaid diagram:
 
         // Return the result to the client
         res.json(result);
+
+        // **UPDATED CODE ENDS HERE**
+
     } catch (err) {
         console.error('Error processing request:', err.message);
         res.status(500).json({ error: 'Internal server error' });
@@ -218,10 +239,11 @@ const extractMermaidCode = (text) => {
 // Function to generate an image from Mermaid code using mermaid-cli
 const generateMermaidImage = async (mermaidCode) => {
     try {
-        // Create temporary input and output file paths
+        // Create unique image name
         const timestamp = Date.now();
-        const inputFilePath = path.join(process.cwd(), `diagrams/diagram-${timestamp}.mmd`);
-        const outputFilePath = path.join(process.cwd(), `diagrams/diagram-${timestamp}.png`);
+        const imageName = `diagram-${timestamp}.png`;
+        const inputFilePath = path.join(diagramsDir, `diagram-${timestamp}.mmd`);
+        const outputFilePath = path.join(diagramsDir, imageName);
 
         // Write the Mermaid code to the input file
         fs.writeFileSync(inputFilePath, mermaidCode);
@@ -241,17 +263,11 @@ const generateMermaidImage = async (mermaidCode) => {
             });
         });
 
-        // Read the generated image file
-        const imageBuffer = fs.readFileSync(outputFilePath);
-
-        // Convert the image buffer to a base64 string
-        const imageBase64 = imageBuffer.toString('base64');
-
-        // Clean up temporary files
+        // Clean up temporary input file
         fs.unlinkSync(inputFilePath);
-        fs.unlinkSync(outputFilePath);
 
-        return imageBase64;
+        // Return the image name
+        return imageName;
     } catch (error) {
         console.error('Error generating Mermaid image:', error.message);
         return null;
