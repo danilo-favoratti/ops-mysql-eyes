@@ -3,10 +3,29 @@ require('dotenv').config(); // Load environment variables from .env
 const express = require('express');
 const mysql = require('mysql2');
 const app = express();
-const port = process.env.SERVER_PORT || 1413; // Use port from .env or default to 1413
+const port = process.env.SERVER_PORT || 1413;
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+// Authentication Middleware
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Extract token from "Bearer <token>"
+
+    if (!token) {
+        console.error('No token provided');
+        return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    }
+
+    if (token !== process.env.AUTH_TOKEN) {
+        console.error('Invalid token');
+        return res.status(403).json({ error: 'Forbidden: Invalid token' });
+    }
+
+    // Token is valid
+    next();
+}
 
 // Create a connection pool using environment variables
 const pool = mysql.createPool({
@@ -14,7 +33,7 @@ const pool = mysql.createPool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 3306, // Default to 3306 if not specified
+    port: process.env.DB_PORT || 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
@@ -28,6 +47,9 @@ app.use((req, res, next) => {
     console.log(`Incoming request: ${req.method} ${req.url}`);
     next();
 });
+
+// Apply the authentication middleware to all routes below
+app.use(authenticateToken);
 
 // Route to handle SQL queries
 app.post('/query', (req, res) => {
