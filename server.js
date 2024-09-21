@@ -6,7 +6,9 @@ import express from 'express';
 import mysql from 'mysql2/promise'; // Promise-based MySQL client
 import OpenAI from 'openai'; // Import OpenAI default export
 import { LRUCache } from 'lru-cache';
-import axios from 'axios'; // For making HTTP requests to Kroki API
+import mermaid from 'mermaid'; // For rendering Mermaid diagrams
+import { JSDOM } from 'jsdom'; // For virtual DOM
+import sharp from 'sharp'; // For image conversion
 
 const app = express();
 const port = process.env.SERVER_PORT || 1413;
@@ -213,18 +215,41 @@ const extractMermaidCode = (text) => {
     }
 };
 
-// Function to generate an image from Mermaid code using the Kroki API
+// Function to generate an image from Mermaid code using mermaid and sharp
 const generateMermaidImage = async (mermaidCode) => {
     try {
-        // Send Mermaid code to Kroki API to get the PNG image
-        const response = await axios.post('https://kroki.io/mermaid/png', mermaidCode, {
-            headers: {
-                'Content-Type': 'text/plain',
+        // Set up virtual DOM inside the function
+        const { window } = new JSDOM('<!DOCTYPE html><html><body></body></html>');
+        const document = window.document;
+
+        // Configure Mermaid
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default', // You can change the theme if needed
+            mermaid: {
+                securityLevel: 'loose',
             },
-            responseType: 'arraybuffer', // Important to get binary data
         });
 
-        const pngBuffer = Buffer.from(response.data, 'binary');
+        // Render the Mermaid diagram to SVG
+        const svgCode = await new Promise((resolve, reject) => {
+            mermaid.mermaidAPI.render(
+                'mermaidGraph',
+                mermaidCode,
+                (svg) => {
+                    resolve(svg);
+                },
+                (error) => {
+                    reject(error);
+                },
+                document.body
+            );
+        });
+
+        // Convert SVG to PNG using Sharp
+        const pngBuffer = await sharp(Buffer.from(svgCode))
+            .png()
+            .toBuffer();
 
         // Convert the PNG buffer to a base64 string
         const imageBase64 = pngBuffer.toString('base64');
