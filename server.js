@@ -6,9 +6,7 @@ import express from 'express';
 import mysql from 'mysql2/promise'; // Promise-based MySQL client
 import OpenAI from 'openai'; // Import OpenAI default export
 import { LRUCache } from 'lru-cache';
-import { exec } from 'child_process'; // For executing shell commands
-import fs from 'fs';
-import path from 'path';
+import axios from 'axios'; // For making HTTP requests to Kroki API
 
 const app = express();
 const port = process.env.SERVER_PORT || 1413;
@@ -80,7 +78,25 @@ app.post('/query', async (req, res) => {
         return res.status(400).json({ error: 'No SQL query provided' });
     }
 
-    // ... [Validation code remains unchanged] ...
+    // Basic validation: Ensure the query starts with 'SELECT' and doesn't contain forbidden keywords
+    const trimmedSql = sql.trim().toUpperCase();
+    if (!trimmedSql.startsWith('SELECT')) {
+        console.error('Invalid query: Only SELECT statements are allowed');
+        return res.status(400).json({ error: 'Only SELECT statements are allowed' });
+    }
+
+    // Disallow certain dangerous keywords
+    const forbiddenPatterns = /(\b(ALTER|DROP|DELETE|INSERT|UPDATE|TRUNCATE|EXEC|MERGE|CALL|UNION|--|;|\*\/|\/\*)\b)/i;
+    if (forbiddenPatterns.test(sql)) {
+        console.error('Forbidden keyword detected in SQL query');
+        return res.status(400).json({ error: 'Invalid or unsafe SQL query' });
+    }
+
+    // Limit query length to prevent overly long queries
+    if (sql.length > 1000) {
+        console.error('SQL query exceeds maximum allowed length');
+        return res.status(400).json({ error: 'SQL query is too long' });
+    }
 
     // Check if the result is in the cache
     const cachedResult = cache.get(sql);
@@ -93,6 +109,15 @@ app.post('/query', async (req, res) => {
         // Execute the query safely
         const [results] = await pool.query(sql);
         console.log(`Query executed successfully. Number of records: ${results.length}`);
+
+        // Handle zero results
+        if (results.length === 0) {
+            console.log('No data found for the given query.');
+            return res.status(200).json({
+                message: 'No data found for the given query. Please check your query and try again.',
+                sql,
+            });
+        }
 
         // Prepare data for OpenAI API
         const data = JSON.stringify(results, null, 2);
@@ -111,7 +136,7 @@ Mermaid diagram:
 
         // Send the prompt to the OpenAI API
         const response = await openai.chat.completions.create({
-            model: 'gpt-4', // Use 'gpt-3.5-turbo' if 'gpt-4' is not available
+            model: 'gpt-4', // Use 'gpt-3.5-turbo' or another model if 'gpt-4' is not available
             messages: [
                 { role: 'user', content: prompt },
             ],
@@ -165,41 +190,21 @@ const extractMermaidCode = (text) => {
     }
 };
 
-// Function to generate an image from Mermaid code using mermaid-cli
+// Function to generate an image from Mermaid code using the Kroki API
 const generateMermaidImage = async (mermaidCode) => {
     try {
-        // Create temporary input and output file paths
-        const timestamp = Date.now();
-        const inputFilePath = path.join(process.cwd(), `diagram-${timestamp}.mmd`);
-        const outputFilePath = path.join(process.cwd(), `diagram-${timestamp}.png`);
-
-        // Write the Mermaid code to the input file
-        fs.writeFileSync(inputFilePath, mermaidCode);
-
-        // Construct the command to execute mermaid-cli
-        const command = `npx -p @mermaid-js/mermaid-cli mmdc -i "${inputFilePath}" -o "${outputFilePath}" --quiet`;
-
-        // Execute the command
-        await new Promise((resolve, reject) => {
-            exec(command, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`Error executing mermaid-cli: ${stderr}`);
-                    reject(new Error(stderr || 'Error executing mermaid-cli'));
-                } else {
-                    resolve();
-                }
-            });
+        // Send Mermaid code to Kroki API to get the PNG image
+        const response = await axios.post('https://kroki.io/mermaid/png', mermaidCode, {
+            headers: {
+                'Content-Type': 'text/plain',
+            },
+            responseType: 'arraybuffer', // Important to get binary data
         });
 
-        // Read the generated image file
-        const imageBuffer = fs.readFileSync(outputFilePath);
+        const pngBuffer = Buffer.from(response.data, 'binary');
 
-        // Convert the image buffer to a base64 string
-        const imageBase64 = imageBuffer.toString('base64');
-
-        // Clean up temporary files
-        fs.unlinkSync(inputFilePath);
-        fs.unlinkSync(outputFilePath);
+        // Convert the PNG buffer to a base64 string
+        const imageBase64 = pngBuffer.toString('base64');
 
         return imageBase64;
     } catch (error) {
