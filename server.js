@@ -16,8 +16,6 @@ const port = process.env.SERVER_PORT || 1413;
 // Middleware to parse JSON bodies
 app.use(express.json());
 
-// **NEW CODE STARTS HERE**
-
 // Ensure the 'diagrams' directory exists
 const diagramsDir = path.join(process.cwd(), 'diagrams');
 if (!fs.existsSync(diagramsDir)) {
@@ -26,8 +24,6 @@ if (!fs.existsSync(diagramsDir)) {
 
 // Serve static files from the 'diagrams' directory
 app.use('/diagrams', express.static(diagramsDir));
-
-// **NEW CODE ENDS HERE**
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -82,9 +78,9 @@ const cache = new LRUCache({
 // Log when the server starts
 console.log('Server is starting...');
 
-// Route to handle SQL queries, generate Mermaid diagrams, and create images
-app.post('/query', async (req, res) => {
-    const sql = req.body.sql;
+// Endpoint to handle SQL queries
+app.post('/sql-query', async (req, res) => {
+    const sql = JSON.stringify(req.body.sql);
 
     console.log(`Received SQL query: ${sql}`);
 
@@ -117,7 +113,10 @@ app.post('/query', async (req, res) => {
     const cachedResult = cache.get(sql);
     if (cachedResult) {
         console.log('Cache hit for query:', sql);
-        return res.json(cachedResult);
+        return res.json({
+            sql,
+            data: cachedResult,
+        });
     }
 
     try {
@@ -134,11 +133,35 @@ app.post('/query', async (req, res) => {
             });
         }
 
-        // Prepare data for OpenAI API
-        const data = JSON.stringify(results, null, 2);
+        // Store the result in the cache
+        cache.set(sql, results);
 
-        // Create a prompt for the OpenAI API
-        const prompt = `
+        // Return the data to the client
+        return res.json({
+            sql,
+            data: results,
+        });
+
+    } catch (err) {
+        console.error('Error executing SQL query:', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Endpoint to generate Mermaid diagrams and images
+app.post('/generate-mermaid', async (req, res) => {
+    const data = req.body.data; // The data for generating the Mermaid diagram
+
+    if (!data) {
+        console.error('No data provided for Mermaid diagram generation');
+        return res.status(400).json({ error: 'No data provided' });
+    }
+
+    // Convert data to string if necessary
+    const dataString = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+
+    // Create a prompt for the OpenAI API
+    const prompt = `
 #MISSION
 Given the following JSON data, create a Mermaid diagram that best represents the relationships or flow depicted by the data. Use appropriate Mermaid syntax.
 
@@ -159,7 +182,7 @@ pie title Cost by Deputy
     "Deputy A" : 386
     "Deputy B" : 85
     "Deputy C" : 15
-    
+
 ##Example Cost Journey:
 journey
     title Cost Per Month
@@ -171,22 +194,6 @@ journey
       Flights: 6: Me
       Office Supply: 5: Me
 
-##Example Quadrant Chart
-quadrantChart
-    title Cost compared to others
-    x-axis Low Reach --> This Month Cost
-    y-axis Low Engagement --> Year Cost
-    quadrant-1 Label A
-    quadrant-2 Label B
-    quadrant-3 Label C
-    quadrant-4 Label D
-    Deputy A: [0.3, 0.6]
-    Deputy B: [0.45, 0.23]
-    Deputy C: [0.57, 0.69]
-    Deputy D: [0.78, 0.34]
-    Deputy E: [0.40, 0.34]
-    Deputy F: [0.35, 0.78]
-
 ##Example Timeline
 timeline
     title History of expenditure
@@ -194,24 +201,32 @@ timeline
     Fev/2021 : R$ 2000
     Mar/2021 : R$ 4500
     Abr/2021 : R$ 2000
-    
+
 ##Example XY Chart
-    xychart-beta
+xychart-beta
     title "Cost vs Total Cost"
     x-axis [jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec]
     y-axis "Revenue (in $)" 4000 --> 11000
     bar [5000, 6000, 7500, 8200, 9500, 10500, 11000, 10200, 9200, 8500, 7000, 6000]
     line [5000, 6000, 7500, 8200, 9500, 10500, 11000, 10200, 9200, 8500, 7000, 6000]
 
-  
 ##IMPORTANT
 **Important:** Provide only the Mermaid code enclosed within \`\`\`mermaid and \`\`\`. Do not include any explanations or additional text.
 
 Data:
-${data}
+${dataString}
 
 Mermaid diagram:
 `;
+
+    try {
+        // Check if the result is in the cache
+        const cacheKey = JSON.stringify(data);
+        const cachedResult = cache.get(cacheKey);
+        if (cachedResult) {
+            console.log('Cache hit for data:', cacheKey);
+            return res.json(cachedResult);
+        }
 
         // Send the prompt to the OpenAI API
         const response = await openai.chat.completions.create({
@@ -229,16 +244,7 @@ Mermaid diagram:
 
         if (!mermaidDiagram) {
             console.warn('Failed to extract Mermaid diagram from OpenAI response');
-            // Proceed without Mermaid diagram
-            const result = {
-                sql,
-                message: 'Mermaid diagram could not be generated.',
-                data: results,
-            };
-            // Store the result in the cache
-            cache.set(sql, result);
-            // Return the result to the client
-            return res.json(result);
+            return res.status(500).json({ error: 'Failed to generate Mermaid diagram' });
         }
 
         console.log('Extracted Mermaid diagram:', mermaidDiagram);
@@ -248,37 +254,25 @@ Mermaid diagram:
 
         if (!imageName) {
             console.warn('Failed to generate image from Mermaid diagram');
-            // Proceed without image
-            const result = {
-                sql,
-                mermaidDiagram,
-                message: 'Image could not be generated from Mermaid diagram.',
-                data: results,
-            };
-            // Store the result in the cache
-            cache.set(sql, result);
-            // Return the result to the client
-            return res.json(result);
+            return res.status(500).json({ error: 'Failed to generate image from Mermaid diagram' });
         }
 
         // Construct the image URL
         const imageUrl = `https://ops.favoratti.com/diagrams/${imageName}`;
 
         const result = {
-            sql,
             mermaidDiagram,
-            imageUrl, // URL to the image
-            data: results,
+            imageUrl,
         };
 
         // Store the result in the cache
-        cache.set(sql, result);
+        cache.set(cacheKey, result);
 
         // Return the result to the client
         res.json(result);
 
     } catch (err) {
-        console.error('Error processing request:', err.message);
+        console.error('Error generating Mermaid diagram:', err.message);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
